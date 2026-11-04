@@ -1,0 +1,19 @@
+{
+  "name": "rtk-zcode-market",
+  "plugins": [
+    {
+      "name": "rtk-zcode",
+      "source": "./rtk-zcode",
+      "version": "0.2.0",
+      "description": "RTK token optimization for ZCode: transparently rewrites Bash commands through rtk, saving 60%+ tokens.",
+      "displayName": "RTK Token 优化",
+      "displayName_i18n": {
+        "zh-CN": "RTK Token 优化"
+      },
+      "description_i18n": {
+        "zh-CN": "把 rtk（Rust Token Killer）接入 ZCode：Bash 命令被 hook 透明改写走 rtk 压缩输出，实测省 60%+ token，内置 rtk.exe 无需单独安装。"
+      },
+      "category": "developer-tools"
+    }
+  ]
+}
