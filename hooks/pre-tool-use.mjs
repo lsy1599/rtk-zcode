@@ -57,6 +57,17 @@ if (/^rtk(\s|$)/.test(cmd.trim())) {
   log('command already prefixed with rtk; skipping');
   done();
 }
+// RTK_OFF=1 sentinel (plan mode): ZCode's plan gate only allows whitelisted
+// read-only commands, and an rtk rewrite makes the command unclassifiable.
+// Strip the prefix and return the bare command untouched.
+if (/^RTK_OFF=1(\s|$)/.test(cmd)) {
+  const bare = cmd.replace(/^RTK_OFF=1\s*/, '');
+  if (bare.trim()) {
+    log('RTK_OFF sentinel; skipping rewrite');
+    console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { command: bare } } }));
+  }
+  done();
+}
 
 const claudePayload = JSON.stringify({
   hook_event_name: 'PreToolUse',
@@ -69,7 +80,14 @@ log(`rtk exit=${r.status} out=${out || '<empty>'}`);
 if (!out) done();
 
 try {
-  console.log(JSON.stringify(JSON.parse(out)));
+  // ZCode validates hook stdout against a strict schema; only forward
+  // decisions that actually carry a PreToolUse decision payload.
+  const decision = JSON.parse(out);
+  if (!decision.hookSpecificOutput) {
+    log(`rtk output not a PreToolUse decision; skipping: ${out}`);
+    done();
+  }
+  console.log(JSON.stringify(decision));
 } catch {
   log(`rtk output not valid JSON; skipping: ${out}`);
 }

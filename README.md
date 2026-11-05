@@ -26,21 +26,18 @@ hook 用 node 单进程直连 rtk（`type: "process"`，无 shell、无 jq 依�
 - **node** 在 PATH 上（hook 是 node 脚本）
 - **rtk**：三选一
   1. `winget install rtk-ai.rtk`（推荐，可自动更新）
-  2. 无需安装——hook 找不到 PATH 里的 rtk 时自动回退到插件内置的 `rtk-zcode/bin/rtk.exe`
+  2. 无需安装——hook 找不到 PATH 里的 rtk 时自动回退到插件内置的 `bin/rtk.exe`
   3. 设环境变量 `RTK_BIN` 指向任意 rtk 可执行文件
 
 ## 安装
 
-**方式一（推荐）：插件市场**
+**方式一（推荐）：添加插件目录**
 
-1. 打开 ZCode → **设置 → 插件管理 → 发现** → 点「+」添加插件市场
-2. 粘贴本仓库地址：`https://github.com/lsy1599/rtk-zcode`
-3. 安装列表中的 **RTK Token 优化**（rtk-zcode）插件
-4. 重启 ZCode
+1. clone 本仓库（**保持目录名 `rtk-zcode`**，需与插件清单 name 一致；zip 下载会得到 `rtk-zcode-main`，请改名）
+2. ZCode → **设置 → 插件管理** → 添加插件目录，选择**仓库根目录**（根目录含 `.zcode-plugin/plugin.json`）
+3. 重启 ZCode
 
-**方式二（手动）：**
-
-clone 本仓库到 ZCode 插件目录 `~/.zcode/plugins/rtk-zcode`，然后在 `~/.zcode/cli/config.json` 的 `plugins` 块注册：
+也可以手动 clone 后在 `~/.zcode/cli/config.json` 的 `plugins` 块注册同一目录：
 
 ```jsonc
 "plugins": {
@@ -49,7 +46,11 @@ clone 本仓库到 ZCode 插件目录 `~/.zcode/plugins/rtk-zcode`，然后在 `
 }
 ```
 
-重启 ZCode 生效。
+**方式二：插件市场**
+
+1. ZCode → **设置 → 插件管理 → 发现** → 点「+」添加插件市场，粘贴本仓库地址：`https://github.com/lsy1599/rtk-zcode`
+2. 安装列表中的 **RTK Token 优化**（rtk-zcode）插件
+3. 若市场添加失败（个别 ZCode 版本不支持 `source: "."` 自引用），改用方式一
 
 ## 验证
 
@@ -62,6 +63,17 @@ rtk gain                                            # 命令计数增长，总�
 
 输出出现 `[+N hidden: rtk recall ...]` = 压缩生效。日志默认写在 `~/.zcode/cli/logs/rtk-zcode.log`，设 `RTK_ZCODE_LOG` 环境变量可改路径。
 
+## Plan 模式
+
+ZCode 的 plan 门禁只放行白名单里的只读命令，而 hook 会把命令改写成 `rtk ...`（未知命令），导致 plan 模式下几乎全部 Bash 被拦。解决办法：**plan 模式下给每条 Bash 命令加前缀 `RTK_OFF=1 `**（如 `RTK_OFF=1 git status`），hook 会剥掉前缀并跳过改写，原生命令正常通过门禁。该前缀本身也是合法 bash（临时环境变量），hook 不在场时同样能执行。
+
+已知限制：hook 收到的 payload 不体现 plan 模式（`permission_mode` 仍为 `yolo`），无法自动探测，依赖 SessionStart 注入的 RTK.md 指示 agent 在 plan 模式下主动加前缀。agent 偶尔漏加时该条命令会被拦，看到报错后重试即可。
+
+## 已知限制
+
+- **管道语义变化**：rtk 的压缩发生在命令执行层，`rg ... | tail -5` 这类管道里 head/tail 拿到的已是 rtk 压缩后的输出（尾部出现 `[+N hidden: rtk recall ...]` 标记），与原始命令语义不同。需要精确定位（原始输出的末尾 N 行、行号）时，改用 Read/Grep 工具而非 bash 管道。
+- **plan 模式**：rtk 改写后的 `rtk ...` 命令不在 plan 只读白名单里，会被门禁拦截，见上文「Plan 模式」一节（`RTK_OFF=1 ` 前缀）。
+
 ## 回滚
 
 市场安装：设置 → 插件管理 → 卸载 rtk-zcode。手动安装：从 `plugins.dirs` 删掉那一行。两种方式都不修改 ZCode 任何其他文件，`AGENTS.md` 保持干净（感知层走 SessionStart 注入）。
@@ -69,21 +81,20 @@ rtk gain                                            # 命令计数增长，总�
 ## 目录结构
 
 ```
-rtk-zcode/                          # 仓库根 = 插件市场根
-├── marketplace.json                # 市场清单
-└── rtk-zcode/                      # 插件本体（目录名 = 插件名）
-    ├── .zcode-plugin/plugin.json   # 插件清单
-    ├── hooks/
-    │   ├── hooks.json              # hook 注册（type: process + ${ZCODE_PLUGIN_ROOT}）
-    │   ├── pre-tool-use.mjs        # 命令改写（node）
-    │   └── session-start.mjs       # RTK.md 注入（node）
-    ├── bin/rtk.exe                 # 内置 rtk（PATH 找不到时自动回退）
-    ├── RTK.md                      # SessionStart 注入的感知内容
-    └── LICENSE                     # MIT
+rtk-zcode/                          # 仓库根 = 插件本体（= 市场根）
+├── .zcode-plugin/plugin.json       # 插件清单
+├── marketplace.json                # 市场清单（source: "."，可选）
+├── hooks/
+│   ├── hooks.json                  # hook 注册（type: process + ${ZCODE_PLUGIN_ROOT} + timeoutMs）
+│   ├── pre-tool-use.mjs            # 命令改写（node）
+│   └── session-start.mjs           # RTK.md 注入（node）
+├── bin/rtk.exe                     # 内置 rtk（PATH 找不到时自动回退）
+├── RTK.md                          # SessionStart 注入的感知内容
+└── LICENSE                         # MIT
 ```
 
 ## 许可与致谢
 
-- 插件机制基于 macgaf 的上游实现（MIT，见 [LICENSE](rtk-zcode/LICENSE)）重构：hook 重写为 node 单进程、去除 jq/python3 依赖、模板变量改用 `${ZCODE_PLUGIN_ROOT}`、内置 rtk.exe 自动回退
+- 插件机制基于 macgaf 的上游实现（MIT，见 [LICENSE](LICENSE)）重构：hook 重写为 node 单进程、去除 jq/python3 依赖、模板变量沿用 `${ZCODE_PLUGIN_ROOT}`、内置 rtk.exe 自动回退
 - [rtk](https://github.com/rtk-ai/rtk)（MIT），`bin/rtk.exe` 来自其官方发行版
 - 本仓库沿用 MIT

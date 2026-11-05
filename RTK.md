@@ -31,3 +31,18 @@ Example: `git status` → `rtk git status` (transparent, 0 tokens overhead)
 
 Commands rtk does not optimize (e.g. `mkdir`, `echo`) run unchanged. You do not
 need to prefix commands with `rtk` yourself — the hook handles it.
+
+## Plan Mode (read-only exploration)
+
+In plan mode, ZCode only allows whitelisted read-only commands. The rtk rewrite
+turns `git status` into the unknown command `rtk git status`, which the plan
+gate blocks — so in plan mode, prefix **every** Bash command with `RTK_OFF=1 `:
+
+```bash
+RTK_OFF=1 git status      # hook strips the prefix; original command runs untouched
+RTK_OFF=1 rg -n "pattern" src/
+```
+
+The hook removes the prefix and skips the rtk rewrite, so ZCode sees the native
+command and the plan gate passes it. Use the prefix in plan mode only — in all
+other modes, write commands normally.

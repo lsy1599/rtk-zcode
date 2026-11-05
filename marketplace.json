@@ -3,8 +3,8 @@
   "plugins": [
     {
       "name": "rtk-zcode",
-      "source": "./rtk-zcode",
-      "version": "0.2.0",
+      "source": ".",
+      "version": "0.3.0",
       "description": "RTK token optimization for ZCode: transparently rewrites Bash commands through rtk, saving 60%+ tokens.",
       "displayName": "RTK Token 优化",
       "displayName_i18n": {
