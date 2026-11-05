@@ -7,14 +7,11 @@ shows measured savings; `rtk discover` finds missed optimization opportunities.
 
 ## Plan Mode (read-only exploration)
 
-In plan mode, ZCode only allows whitelisted read-only commands; the rtk rewrite
-makes them unclassifiable. Prefix **every** Bash segment with `RTK_OFF=1 ` — the
-hook strips the prefix and skips the rewrite, so the native command runs:
-
-```bash
-RTK_OFF=1 git status --short
-RTK_OFF=1 rg -n "pattern" src/
-RTK_OFF=1 git status --short && RTK_OFF=1 git stash list   # compound: prefix EVERY segment
-```
-
-Use the prefix in plan mode only — in all other modes, write commands normally.
+In plan mode, hooks don't run — commands reach ZCode's gate as written. Write
+commands normally, WITHOUT any `RTK_OFF=1` prefix (the prefix makes plain
+commands look like env-assignments and gets them blocked). If a command is
+denied, don't retry it as-is: simplify to a single plain read-only command, or
+use the Read/Glob/Grep tools instead. If you ever see commands rewritten to
+`rtk ...` and denied in plan mode (some setups may run hooks there), prefix
+every segment with `RTK_OFF=1 ` as the escape hatch. In normal modes,
+`RTK_OFF=1 cmd` manually skips the rtk rewrite.
