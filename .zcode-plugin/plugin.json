@@ -1,6 +1,6 @@
 {
   "name": "rtk-zcode",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "RTK token optimization for ZCode: transparently rewrites Bash commands through rtk (rtk hook claude).",
   "author": {
     "name": "lsy1599"

@@ -59,9 +59,9 @@ if (/^rtk(\s|$)/.test(cmd.trim())) {
 }
 // RTK_OFF=1 sentinel (plan mode): ZCode's plan gate only allows whitelisted
 // read-only commands, and an rtk rewrite makes the command unclassifiable.
-// Strip the prefix and return the bare command untouched.
-if (/^RTK_OFF=1(\s|$)/.test(cmd)) {
-  const bare = cmd.replace(/^RTK_OFF=1\s*/, '');
+// Strip every segment-leading prefix and return the bare command untouched.
+if (/(?:^|[;&|])\s*RTK_OFF=1(?:\s|$)/.test(cmd)) {
+  const bare = cmd.replace(/((?:^|[;&|])[ \t]*)RTK_OFF=1[ \t]+/g, '$1');
   if (bare.trim()) {
     log('RTK_OFF sentinel; skipping rewrite');
     console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { command: bare } } }));

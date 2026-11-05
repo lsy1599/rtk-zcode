@@ -41,6 +41,7 @@ gate blocks — so in plan mode, prefix **every** Bash command with `RTK_OFF=1 `
 ```bash
 RTK_OFF=1 git status      # hook strips the prefix; original command runs untouched
 RTK_OFF=1 rg -n "pattern" src/
+RTK_OFF=1 git status --short && RTK_OFF=1 git stash list   # compound: prefix EVERY segment
 ```
 
 The hook removes the prefix and skips the rtk rewrite, so ZCode sees the native
