@@ -15,7 +15,7 @@
     ],
     "SessionStart": [
       {
-        "matcher": "startup|clear|compact|resume",
+        "matcher": "startup|clear|compact|resume|fork",
         "hooks": [
           {
             "type": "process",

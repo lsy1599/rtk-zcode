@@ -41,9 +41,17 @@ if (!rtk) {
 }
 
 let cmd = '';
+// ZCode sends the FULL tool_input (description/timeout/run_in_background included);
+// keep it so rewrites preserve fields instead of reducing input to {command}.
+let toolInput = null;
 try {
   const d = JSON.parse(payload);
-  cmd = d?.tool_input?.command ?? d?.toolInput?.command ?? d?.input?.command ?? '';
+  toolInput =
+    (d?.tool_input && typeof d.tool_input === 'object' && d.tool_input) ||
+    (d?.toolInput && typeof d.toolInput === 'object' && d.toolInput) ||
+    (d?.input && typeof d.input === 'object' && d.input) ||
+    null;
+  cmd = toolInput?.command ?? '';
 } catch {
   log('payload not valid JSON; skipping');
   done();
@@ -64,7 +72,7 @@ if (/(?:^|[;&|])\s*RTK_OFF=1(?:\s|$)/.test(cmd)) {
   const bare = cmd.replace(/((?:^|[;&|])[ \t]*)RTK_OFF=1[ \t]+/g, '$1');
   if (bare.trim()) {
     log('RTK_OFF sentinel; skipping rewrite');
-    console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { command: bare } } }));
+    console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput: { ...toolInput, command: bare } } }));
   }
   done();
 }
@@ -72,7 +80,7 @@ if (/(?:^|[;&|])\s*RTK_OFF=1(?:\s|$)/.test(cmd)) {
 const claudePayload = JSON.stringify({
   hook_event_name: 'PreToolUse',
   tool_name: 'Bash',
-  tool_input: { command: cmd },
+  tool_input: toolInput && typeof toolInput === 'object' ? toolInput : { command: cmd },
 });
 const r = spawnSync(rtk, ['hook', 'claude'], { input: claudePayload, encoding: 'utf8', timeout: 10_000 });
 const out = (r.stdout || '').trim();
@@ -86,6 +94,13 @@ try {
   if (!decision.hookSpecificOutput) {
     log(`rtk output not a PreToolUse decision; skipping: ${out}`);
     done();
+  }
+  // ZCode replaces the whole execution input with updatedInput; merge so the
+  // original fields (description/timeout/run_in_background) survive a rewrite
+  // even if rtk echoes back only {command}.
+  const ui = decision.hookSpecificOutput.updatedInput;
+  if (ui && typeof ui === 'object' && !Array.isArray(ui)) {
+    decision.hookSpecificOutput.updatedInput = { ...toolInput, ...ui };
   }
   console.log(JSON.stringify(decision));
 } catch {
