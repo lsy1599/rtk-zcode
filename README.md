@@ -65,23 +65,31 @@ rtk gain                                            # 命令计数增长，总�
 
 ## Plan 模式
 
-2026-11-15 终局实测（修正 11-14 结论）：plan 模式下 PreToolUse hook **从不运行**——命令原样到达门禁，无 rtk 改写，也无需 `RTK_OFF=1`。此前 11-14"hook 会运行且改写被拒"系误把 yolo 会话当 plan 窗口（其日志 payload 全部 `"mode":"yolo"`）。
+2026-11-15 终局：plan 模式下 PreToolUse hook **从不运行**——命令原样到达门禁，无 rtk 改写，也无需 `RTK_OFF=1`。门禁根源已在 ZCode 3.18.2 源码逐行核实（与本机安装版本 3.18.2 一致），此前"tail/wc/sort/uniq 被拒"的实测矩阵系形状误判，源码白名单其实包含它们：
 
-plan 门禁是逐段白名单（判定看形状、个别有波动）：cwd 内纯 `git log` / `git show` / `git status` / `ls` / `rg` / `head` / `cat` / `echo` / `find` 放行；`cd`、`git -C <path>`（连 `-C .` 都拒）、`tail`、`wc`、`sort`、`uniq` 被拒。**跨仓库（cwd≠目标仓库）在 plan 下读 git 历史无解**——这是 ZCode 门禁白名单的平台限制，与 rtk 无关。模型侧收到明确拒绝文案，但 UI 把拒绝渲染成"没有输出"，易误读为空结果。被拦时不要原样重试、不要加 `RTK_OFF=1`（实测无效），改用 Read/`cat`/`head`/`rg`，或 cwd 已在目标仓库时用纯 git 命令。普通模式下 `RTK_OFF=1 cmd` 仍是手动跳过改写的开关。
+- 闸门在 `permission/service.ts` 的 `checkPlanMode`：Bash 只读判定交给 `isRuntimeReadOnlyBashCommand`（`tool/handlers/bash-semantics.ts`），非只读一律拒绝，文案 "Plan mode only allows read-only, non-destructive tools"。
+- 只读判定是**逐段白名单 + safeFlags 校验**（`bash-readonly-policy-*.ts`），白名单很宽：`ls/cat/head/tail/wc/sort/uniq/rg/grep/find/echo/du/stat/tree/diff` 等都在表内，`tail -n 50` 这类 number 参数也放行。
+- 三条硬规则解释了"plan 下 git 没有输出"：
+  1. **git 与 cd/pushd/popd 同现即拒**（`bash-git-runtime-safety.ts`，注释写明：git 可能加载目标目录 hooks/config）：`cd X && git log` 必拒；纯 `cd X && ls/grep` 反而放行。
+  2. **`git -C` 在 git 全局危险 flag 集**（`GIT_GLOBAL_DANGEROUS_FLAGS = {-c, -C, --git-dir, --work-tree, --bare, …}`）：`git -C <path>`（连 `-C .`）必拒 → **跨仓库 git 历史在 plan 下无解**，属平台设计而非 bug。
+  3. **env 赋值只认白名单**（`SAFE_ENV_ASSIGNMENTS`）：`RTK_OFF=1` 不在名单 → 带 env 前缀必拒。
+- AST 解析失败/未知形状回退拒绝 → 个别形状有波动；cwd 须在受信 git worktree 内，cwd 内纯 `git log/show/status` 才放行。
+
+模型侧收到明确拒绝文案（作为 tool message 内容），但 UI（`ToolCallBlocks/renderers/execute.tsx`）只在 `status === "failed"` 时显示错误文本，否则渲染空输出占位「没有输出。」（`zh-CN.ts` 的 `chat.toolCall.execute.noOutput`）——被拒不是空结果。被拦时不要原样重试、不要加 `RTK_OFF=1`（实测无效，源码同证），改用 Read/`cat`/`head`/`rg`，或 cwd 已在目标仓库时用纯 git 命令。普通模式下 `RTK_OFF=1 cmd` 仍是手动跳过改写的开关。
 
 ### 建议写入你的全局 AGENTS.md
 
 RTK.md 注入只在装了本插件且启用的会话生效；把下面这段复制进 `~/.zcode/AGENTS.md`（全局用户指令），任何项目的 plan 会话开局就会带上这条提示，避免 agent 反复试错：
 
 ```markdown
-## Plan 模式门禁（实测 2026-11-15）
-plan 模式 bash 门禁是逐段白名单（个别形状有波动）：cwd 内纯 `git log/show/status`、`ls`、`rg`、`head`、`cat`、`find`、`echo` 放行；`cd`、`git -C`、`tail`、`wc`、`sort`、`uniq` 及含 `&&` 的复合命令常被拒，且 UI 把拒绝渲染成空输出「没有输出。」——被拒不是空结果，不要原样重试。跨仓库 git 历史（需要 `cd`/`git -C`）在 plan 下读不到，直接改用 Read/rg 读文件，或说明后跳过。
+## Plan 模式门禁（实测+源码核实 2026-11-15）
+plan bash 门禁按段白名单：`ls/cat/head/tail/wc/sort/uniq/rg/find/echo`、cwd 内纯 `git log/show/status` 放行。三条硬规则：`cd X && git …` 同现必拒、`git -C`（含 `-C .`）必拒——跨仓库 git 历史在 plan 下读不到、`RTK_OFF=1` 等 env 前缀必拒。未知形状回退拒绝，被拒≠空结果（UI 显示「没有输出。」），不要原样重试；改用 Read/rg，或 cwd 已在目标仓库时用纯 git 命令。
 ```
 
 ## 已知限制
 
 - **管道语义变化**：rtk 的压缩发生在命令执行层，`rg ... | tail -5` 这类管道里 head/tail 拿到的已是 rtk 压缩后的输出（尾部出现 `[+N hidden: rtk recall ...]` 标记），与原始命令语义不同。需要精确定位（原始输出的末尾 N 行、行号）时，改用 Read/Grep 工具而非 bash 管道。
-- **plan 模式**：hook 从不运行、无改写；门禁白名单拒 `cd`/`git -C`/`tail` 等（UI 显示为无输出），跨仓库 git 历史读不到属平台限制，见上文「Plan 模式」一节。
+- **plan 模式**：hook 从不运行、无改写；门禁源码已核实——`git` 与 `cd` 同现、`git -C`、env 前缀三条硬规则必拒（UI 显示为无输出），跨仓库 git 历史读不到属平台设计，见上文「Plan 模式」一节。
 
 ## 回滚
 
