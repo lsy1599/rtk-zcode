@@ -65,14 +65,14 @@ rtk gain                                            # 命令计数增长，总�
 
 ## Plan 模式
 
-2026-11-14 实测（taopiaopiao 项目窗口）：plan 模式下 PreToolUse hook **会运行**，并把命令改写成 `rtk ...`——而 plan 门禁不认识 `rtk` 前缀，会以 "Plan mode only allows read-only, non-destructive tools" 拒绝（UI 把拒绝显示成"没有输出"）。同窗口对照组：未经 hook 的 Explore 子代理 24 条裸命令 22 条放行（含同款中文 rg 搜索）——裸只读命令本来能过，改写后才被拒。门禁对形状的判定仍有波动，被拦时不要原样重试。
+2026-11-15 终局实测（修正 11-14 结论）：plan 模式下 PreToolUse hook **从不运行**——命令原样到达门禁，无 rtk 改写，也无需 `RTK_OFF=1`。此前 11-14"hook 会运行且改写被拒"系误把 yolo 会话当 plan 窗口（其日志 payload 全部 `"mode":"yolo"`）。
 
-正确动作：正常裸写命令（**不要加前缀**，前缀会把命令变成"env 赋值开头"的形状反被拦）；若明显只读的命令被拒，给每段加 `RTK_OFF=1 ` 前缀**重试一次**（hook 会剥掉前缀并跳过改写，裸命令即可过门禁）；仍被拦再换更简单的单条命令或 Read/Explore 工具。普通模式下 `RTK_OFF=1 cmd` 是手动跳过改写的开关。
+plan 门禁是逐段白名单（判定看形状、个别有波动）：cwd 内纯 `git log` / `git show` / `git status` / `ls` / `rg` / `head` / `cat` / `echo` / `find` 放行；`cd`、`git -C <path>`（连 `-C .` 都拒）、`tail`、`wc`、`sort`、`uniq` 被拒。**跨仓库（cwd≠目标仓库）在 plan 下读 git 历史无解**——这是 ZCode 门禁白名单的平台限制，与 rtk 无关。模型侧收到明确拒绝文案，但 UI 把拒绝渲染成"没有输出"，易误读为空结果。被拦时不要原样重试、不要加 `RTK_OFF=1`（实测无效），改用 Read/`cat`/`head`/`rg`，或 cwd 已在目标仓库时用纯 git 命令。普通模式下 `RTK_OFF=1 cmd` 仍是手动跳过改写的开关。
 
 ## 已知限制
 
 - **管道语义变化**：rtk 的压缩发生在命令执行层，`rg ... | tail -5` 这类管道里 head/tail 拿到的已是 rtk 压缩后的输出（尾部出现 `[+N hidden: rtk recall ...]` 标记），与原始命令语义不同。需要精确定位（原始输出的末尾 N 行、行号）时，改用 Read/Grep 工具而非 bash 管道。
-- **plan 模式**：hook 会运行并把命令改写成 `rtk ...`，plan 门禁不认识该前缀、会拒绝改写后的命令（UI 显示为无输出）；`RTK_OFF=1 ` 前缀重试是逃生口，见上文「Plan 模式」一节。
+- **plan 模式**：hook 从不运行、无改写；门禁白名单拒 `cd`/`git -C`/`tail` 等（UI 显示为无输出），跨仓库 git 历史读不到属平台限制，见上文「Plan 模式」一节。
 
 ## 回滚
 
