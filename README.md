@@ -69,6 +69,15 @@ rtk gain                                            # 命令计数增长，总�
 
 plan 门禁是逐段白名单（判定看形状、个别有波动）：cwd 内纯 `git log` / `git show` / `git status` / `ls` / `rg` / `head` / `cat` / `echo` / `find` 放行；`cd`、`git -C <path>`（连 `-C .` 都拒）、`tail`、`wc`、`sort`、`uniq` 被拒。**跨仓库（cwd≠目标仓库）在 plan 下读 git 历史无解**——这是 ZCode 门禁白名单的平台限制，与 rtk 无关。模型侧收到明确拒绝文案，但 UI 把拒绝渲染成"没有输出"，易误读为空结果。被拦时不要原样重试、不要加 `RTK_OFF=1`（实测无效），改用 Read/`cat`/`head`/`rg`，或 cwd 已在目标仓库时用纯 git 命令。普通模式下 `RTK_OFF=1 cmd` 仍是手动跳过改写的开关。
 
+### 建议写入你的全局 AGENTS.md
+
+RTK.md 注入只在装了本插件且启用的会话生效；把下面这段复制进 `~/.zcode/AGENTS.md`（全局用户指令），任何项目的 plan 会话开局就会带上这条提示，避免 agent 反复试错：
+
+```markdown
+## Plan 模式门禁（实测 2026-11-15）
+plan 模式 bash 门禁是逐段白名单（个别形状有波动）：cwd 内纯 `git log/show/status`、`ls`、`rg`、`head`、`cat`、`find`、`echo` 放行；`cd`、`git -C`、`tail`、`wc`、`sort`、`uniq` 及含 `&&` 的复合命令常被拒，且 UI 把拒绝渲染成空输出「没有输出。」——被拒不是空结果，不要原样重试。跨仓库 git 历史（需要 `cd`/`git -C`）在 plan 下读不到，直接改用 Read/rg 读文件，或说明后跳过。
+```
+
 ## 已知限制
 
 - **管道语义变化**：rtk 的压缩发生在命令执行层，`rg ... | tail -5` 这类管道里 head/tail 拿到的已是 rtk 压缩后的输出（尾部出现 `[+N hidden: rtk recall ...]` 标记），与原始命令语义不同。需要精确定位（原始输出的末尾 N 行、行号）时，改用 Read/Grep 工具而非 bash 管道。
